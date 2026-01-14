@@ -249,3 +249,4 @@ qualcomm-test/htdemucs_model/
 day6-happy.mp3
 qualcomm-test/*.raw
 qualcomm-example/*.raw
+qualcomm-test/batch_log.txt
