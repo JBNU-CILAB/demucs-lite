@@ -189,18 +189,19 @@ def collect_results(jobs):
                 failed.append(chunk_idx)
                 continue
             
-            # 출력 추출
-            if 'output_0' in output_data:
-                output = np.array(output_data['output_0'][0])
-            elif 'output_1' in output_data:
-                output = np.array(output_data['output_1'][0])
+            # 시간 도메인 출력 추출 (add_67)
+            # Shape: (1, 4, 2, chunk_samples)
+            if 'add_67' in output_data:
+                output = np.array(output_data['add_67'][0])
+                if output.ndim == 4:
+                    output = output[0]  # (4, 2, chunk_samples)
             else:
+                # 출력 키 디버깅
+                print(f"    Available outputs: {list(output_data.keys())}")
                 first_key = list(output_data.keys())[0]
                 output = np.array(output_data[first_key][0])
-            
-            # shape 조정
-            if output.ndim == 4:
-                output = output[0]
+                if output.ndim == 4:
+                    output = output[0]
             
             results.append((start_idx, output))
             print(f"  Chunk {chunk_idx}: ✅")
