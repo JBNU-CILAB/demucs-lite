@@ -9,9 +9,10 @@
 ### 주요 작업 내용
 
 1. **FP16 양자화**: 모델을 Float32 → Float16으로 변환하여 메모리 사용량 절반 감소
-2. **청킹 처리**: NPU 메모리 제한을 우회하기 위해 오디오를 1초 단위로 분할 처리
-3. **배치 추론**: Qualcomm AI Hub에서 병렬 처리로 추론 시간 단축
-4. **Qualcomm NPU 테스트**: Samsung Galaxy S24에서 실제 추론 테스트 수행
+2. **INT8 PTQ 양자화**: 컴파일 시 calibration 데이터로 INT8 양자화 적용 (추가 경량화)
+3. **청킹 처리**: NPU 메모리 제한을 우회하기 위해 오디오를 1초 단위로 분할 처리
+4. **배치 추론**: Qualcomm AI Hub에서 병렬 처리로 추론 시간 단축
+5. **Qualcomm NPU 테스트**: Samsung Galaxy S24에서 실제 추론 테스트 수행
 
 ## Qualcomm AI Hub 테스트 결과
 
@@ -51,7 +52,8 @@ demucs.onnx/
 ├── qualcomm-test/              # Qualcomm AI Hub 테스트
 │   ├── run_qai_hub.py                  # 단일 청크 테스트
 │   ├── run_qai_hub_chunked.py          # 순차 처리
-│   ├── run_qai_hub_batch.py            # 배치 처리 (권장)
+│   ├── run_qai_hub_batch.py            # FP16 배치 처리
+│   ├── run_qai_hub_batch_int8.py       # INT8 PTQ 배치 처리 (권장)
 │   ├── preprocess_demucs.py            # 전처리 (STFT)
 │   └── postprocess_demucs.py           # 후처리 (WAV 변환, ISTFT)
 ├── src/                        # C++ 구현
@@ -77,11 +79,13 @@ python scripts/convert_to_fp16.py onnx-models/htdemucs.onnx onnx-models/htdemucs
 ```bash
 cd qualcomm-test
 
-# 배치 추론 실행 (권장)
+# FP16 배치 추론
 python run_qai_hub_batch.py ../day6-happy.mp3
-
-# 결과를 WAV로 변환
 python postprocess_demucs.py output stems
+
+# INT8 PTQ 배치 추론 (권장 - 더 가볍고 빠름)
+python run_qai_hub_batch_int8.py ../day6-happy.mp3
+python postprocess_demucs.py output stems_int8 --raw-file add_67_int8.raw
 ```
 
 ### 3. Qualcomm AI Hub 설정
@@ -121,10 +125,30 @@ HOP_SIZE = 33075     # 청크 간 이동 거리
 |------|-------|------|
 | add_67 | (1, 4, 2, 44100) | 4개 stem × 스테레오 |
 
+### INT8 양자화 (PTQ)
+
+**FP16 변환**은 숫자 포맷만 바꾸므로 QNN 호환이 됩니다. 하지만 **INT8 양자화**는 각 런타임마다 포맷이 다릅니다:
+
+| 방법 | QNN 호환 |
+|-----|---------|
+| ONNX Runtime `quantize_dynamic` | ❌ (QDQ 노드가 QNN에서 인식 안 됨) |
+| Qualcomm AI Hub PTQ | ✅ |
+
+따라서 Qualcomm에서는 **컴파일 시 calibration 데이터로 PTQ**를 수행합니다:
+
+```python
+hub.submit_compile_job(
+    model=fp16_model,
+    calibration_data=calibration_data,
+    options="--quantize_full_type int8"
+)
+```
+
 ## 결론
 
 - FP16 양자화만으로는 모바일 NPU 메모리 한계를 극복할 수 없었음
 - 1초 단위 청킹으로 메모리 문제 해결
+- **INT8 PTQ**: 컴파일 시 calibration 데이터로 INT8 양자화 적용 가능
 - 실제 기기에서 **청크당 약 100ms** 추론 가능
 - **3분 곡 기준 약 30~35초** 처리 예상
 

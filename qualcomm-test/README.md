@@ -39,11 +39,12 @@ Qualcomm AI Hub를 사용하여 Demucs ONNX 모델을 실제 모바일 NPU에서
 
 ### 추론 스크립트
 
-| 파일 | 설명 | 속도 |
-|------|------|------|
-| `run_qai_hub.py` | 단일 청크 테스트용 | 기본 |
-| `run_qai_hub_chunked.py` | 순차 처리 (1개씩) | 느림 |
-| `run_qai_hub_batch.py` | 배치 처리 (50개씩) | 빠름 |
+| 파일 | 설명 | 양자화 | 속도 |
+|------|------|--------|------|
+| `run_qai_hub.py` | 단일 청크 테스트용 | FP16 | 기본 |
+| `run_qai_hub_chunked.py` | 순차 처리 (1개씩) | FP16 | 느림 |
+| `run_qai_hub_batch.py` | 배치 처리 (50개씩) | FP16 | 빠름 |
+| `run_qai_hub_batch_int8.py` | **INT8 PTQ 배치 처리** | INT8 | 빠름 |
 
 ### 전처리/후처리 스크립트
 
@@ -54,9 +55,9 @@ Qualcomm AI Hub를 사용하여 Demucs ONNX 모델을 실제 모바일 NPU에서
 
 ## 사용법
 
-### 방법 1: 배치 추론 (권장)
+### 방법 1: FP16 배치 추론
 
-전체 곡을 한 번에 처리합니다. 가장 빠릅니다.
+전체 곡을 FP16으로 처리합니다.
 
 ```bash
 # 1. 배치 추론 실행
@@ -66,7 +67,24 @@ python run_qai_hub_batch.py ../day6-happy.mp3
 python postprocess_demucs.py output stems
 ```
 
-### 방법 2: 순차 추론
+### 방법 2: INT8 PTQ 배치 추론
+
+INT8 양자화로 더 가볍고 빠르게 처리합니다.
+
+```bash
+# 1. INT8 PTQ 배치 추론 실행
+python run_qai_hub_batch_int8.py ../day6-happy.mp3
+
+# 2. 결과를 WAV로 변환
+python postprocess_demucs.py output stems_int8 --raw-file add_67_int8.raw
+```
+
+**INT8 PTQ 동작 원리:**
+1. 오디오에서 calibration 샘플 50개 추출
+2. FP16 모델 + calibration 데이터로 컴파일 시 INT8 양자화 자동 적용
+3. INT8 양자화된 모델로 추론
+
+### 방법 3: 순차 추론
 
 각 청크를 순차적으로 처리합니다. 느리지만 안정적입니다.
 
@@ -75,7 +93,7 @@ python run_qai_hub_chunked.py ../day6-happy.mp3
 python postprocess_demucs.py output stems
 ```
 
-### 방법 3: 단일 청크 테스트
+### 방법 4: 단일 청크 테스트
 
 모델 동작 확인용입니다.
 
@@ -184,6 +202,35 @@ SAMPLE_RATE = 44100
 CHUNK_SIZE = 44100   # 1초
 OVERLAP = 11025      # 25%
 BATCH_SIZE = 50
+```
+
+## INT8 양자화 기술 노트
+
+### FP16 vs INT8 양자화의 차이
+
+**FP16 변환**은 단순히 숫자 포맷만 바꾸는 것입니다:
+- 모델 구조 변경 없음
+- QNN이 그대로 해석 가능 ✅
+
+**INT8 양자화**는 연산 자체가 바뀝니다:
+- 각 레이어에 scale/zero_point 파라미터 추가
+- QuantizeLinear/DequantizeLinear 노드 삽입
+
+### 왜 Qualcomm PTQ를 사용해야 하는가?
+
+| 방법 | 모델 구조 | QNN 호환 |
+|-----|---------|---------|
+| ONNX Runtime `quantize_dynamic` | QDQ 노드 추가 | ❌ |
+| Qualcomm AI Hub PTQ | QNN 내부 처리 | ✅ |
+
+ONNX Runtime의 INT8 양자화는 ONNX Runtime용으로 최적화되어 있어 QNN 컴파일러가 인식하지 못합니다. 따라서 Qualcomm에서는 **컴파일 시 calibration 데이터로 PTQ**를 수행해야 합니다.
+
+```python
+hub.submit_compile_job(
+    model=fp16_model,
+    calibration_data=calibration_data,
+    options="--quantize_full_type int8"
+)
 ```
 
 ## 요구 사항

@@ -127,14 +127,13 @@ def save_stems_as_wav(stems: np.ndarray, output_dir: str, original_length: int =
         print(f"  Saved: {output_path}")
 
 
-def postprocess(output_dir: str = "output", wav_output_dir: str = "stems"):
+def postprocess(output_dir: str = "output", wav_output_dir: str = "stems", raw_file: str = "add_67.raw"):
     """메인 후처리 함수"""
     print("="*60)
     print("Demucs Output Postprocessing")
     print("="*60)
     
-    # 시간 도메인 출력 시도 (add_67)
-    time_output_path = os.path.join(output_dir, "add_67.raw")
+    time_output_path = os.path.join(output_dir, raw_file)
     freq_output_path = os.path.join(output_dir, "output.raw")
     
     stems = None
@@ -176,15 +175,24 @@ def postprocess(output_dir: str = "output", wav_output_dir: str = "stems"):
 
 
 def main():
-    output_dir = sys.argv[1] if len(sys.argv) > 1 else "output"
-    wav_output_dir = sys.argv[2] if len(sys.argv) > 2 else "stems"
+    import argparse
     
-    if not os.path.exists(output_dir):
-        print(f"Error: Output directory not found: {output_dir}")
+    parser = argparse.ArgumentParser(description="Demucs output postprocessing")
+    parser.add_argument("output_dir", nargs="?", default="output",
+                        help="Directory containing raw output files")
+    parser.add_argument("wav_output_dir", nargs="?", default="stems",
+                        help="Directory to save WAV files")
+    parser.add_argument("--raw-file", type=str, default="add_67.raw",
+                        help="Raw output filename (default: add_67.raw)")
+    
+    args = parser.parse_args()
+    
+    if not os.path.exists(args.output_dir):
+        print(f"Error: Output directory not found: {args.output_dir}")
         print("Please run run_qai_hub.py first to generate outputs.")
         sys.exit(1)
     
-    postprocess(output_dir, wav_output_dir)
+    postprocess(args.output_dir, args.wav_output_dir, args.raw_file)
 
 
 if __name__ == "__main__":
