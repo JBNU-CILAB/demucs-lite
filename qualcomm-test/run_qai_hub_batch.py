@@ -96,11 +96,62 @@ def compute_stft_for_chunk(chunk: np.ndarray) -> np.ndarray:
     return x.reshape(1, 4, FREQ_BINS, FREQ_CHUNK_LEN).astype(np.float32)
 
 
+def freq_to_time_domain(freq_output: np.ndarray) -> np.ndarray:
+    """
+    주파수 도메인 출력을 시간 도메인으로 변환 (iSTFT)
+    
+    입력: (4, 4, 2048, 44) - 4 sources, 4 channels (L_real, L_imag, R_real, R_imag)
+    출력: (4, 2, CHUNK_SIZE) - 4 sources, stereo
+    """
+    time_outputs = []
+    
+    for source_idx in range(NB_SOURCES):
+        source_freq = freq_output[source_idx]  # (4, 2048, 44)
+        
+        # Real/Imag 채널을 complex로 결합
+        L_complex = source_freq[0] + 1j * source_freq[1]  # (2048, 44)
+        R_complex = source_freq[2] + 1j * source_freq[3]  # (2048, 44)
+        
+        # DC bin 추가 (0으로 패딩) - STFT에서 제거했던 DC bin 복원
+        L_full = np.zeros((FREQ_BINS + 1, FREQ_CHUNK_LEN), dtype=np.complex64)
+        R_full = np.zeros((FREQ_BINS + 1, FREQ_CHUNK_LEN), dtype=np.complex64)
+        L_full[1:FREQ_BINS+1, :] = L_complex
+        R_full[1:FREQ_BINS+1, :] = R_complex
+        
+        # iSTFT 수행
+        L_time = librosa.istft(
+            L_full,
+            hop_length=FFT_HOP_SIZE,
+            win_length=FFT_WINDOW_SIZE,
+            window='hann',
+            center=True,
+            length=CHUNK_SIZE
+        )
+        R_time = librosa.istft(
+            R_full,
+            hop_length=FFT_HOP_SIZE,
+            win_length=FFT_WINDOW_SIZE,
+            window='hann',
+            center=True,
+            length=CHUNK_SIZE
+        )
+        
+        time_outputs.append(np.stack([L_time, R_time], axis=0))
+    
+    return np.stack(time_outputs, axis=0).astype(np.float32)  # (4, 2, CHUNK_SIZE)
+
+
 def create_overlap_window(chunk_size: int, overlap: int) -> np.ndarray:
+    """Hann 기반 overlap-add 윈도우 생성 (합산 시 정확히 1이 되도록)"""
     window = np.ones(chunk_size)
-    fade_in = np.linspace(0, 1, overlap)
+    
+    # Hann 윈도우의 절반 사용: sin²(x) + cos²(x) = 1
+    # fade_in: 0 → 1 (부드러운 시작)
+    fade_in = np.sin(np.linspace(0, np.pi/2, overlap)) ** 2
+    # fade_out: 1 → 0 (부드러운 끝)
+    fade_out = np.cos(np.linspace(0, np.pi/2, overlap)) ** 2
+    
     window[:overlap] = fade_in
-    fade_out = np.linspace(1, 0, overlap)
     window[-overlap:] = fade_out
     return window
 
@@ -189,19 +240,45 @@ def collect_results(jobs):
                 failed.append(chunk_idx)
                 continue
             
-            # 시간 도메인 출력 추출 (add_67)
-            # Shape: (1, 4, 2, chunk_samples)
-            if 'add_67' in output_data:
-                output = np.array(output_data['add_67'][0])
-                if output.ndim == 4:
-                    output = output[0]  # (4, 2, chunk_samples)
-            else:
-                # 출력 키 디버깅
+            # HTDemucs는 두 가지 출력을 합산해야 함
+            # output_0 = 주파수 도메인 (1, 4, 4, 2048, 44) → iSTFT 필요
+            # output_1 = 시간 도메인 (1, 4, 2, 44100) → 직접 사용
+            
+            output_time = None
+            output_freq = None
+            
+            # 시간 도메인 출력 추출
+            if 'output_1' in output_data:
+                output_time = np.array(output_data['output_1'][0])
+                if output_time.ndim == 4:
+                    output_time = output_time[0]  # (4, 2, chunk_samples)
+            elif 'xt' in output_data:
+                output_time = np.array(output_data['xt'][0])
+                if output_time.ndim == 4:
+                    output_time = output_time[0]
+            
+            # 주파수 도메인 출력 추출
+            if 'output_0' in output_data:
+                output_freq = np.array(output_data['output_0'][0])
+                if output_freq.ndim == 5:
+                    output_freq = output_freq[0]  # (4, 4, 2048, 44)
+            elif 'output' in output_data:
+                output_freq = np.array(output_data['output'][0])
+                if output_freq.ndim == 5:
+                    output_freq = output_freq[0]
+            
+            if output_time is None:
                 print(f"    Available outputs: {list(output_data.keys())}")
-                first_key = list(output_data.keys())[0]
-                output = np.array(output_data[first_key][0])
-                if output.ndim == 4:
-                    output = output[0]
+                raise ValueError(f"Time domain output not found in: {list(output_data.keys())}")
+            
+            # 주파수 도메인이 있으면 iSTFT 변환 후 합산
+            if output_freq is not None:
+                wav_from_spec = freq_to_time_domain(output_freq)
+                output = wav_from_spec + output_time
+            else:
+                # 주파수 도메인이 없으면 시간 도메인만 사용
+                print(f"  Chunk {chunk_idx}: ⚠️ No freq output, using time only")
+                output = output_time
             
             results.append((start_idx, output))
             print(f"  Chunk {chunk_idx}: ✅")

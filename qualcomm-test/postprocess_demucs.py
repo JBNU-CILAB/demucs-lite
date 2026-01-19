@@ -28,16 +28,22 @@ STEM_NAMES = ["drums", "bass", "other", "vocals"]
 def load_time_domain_output(output_path: str) -> np.ndarray:
     """
     시간 도메인 출력 로드 (add_67)
-    Shape: (1, 4, 2, 343980) -> (4, 2, 343980)
+    Shape: (1, 4, 2, time_samples) -> (4, 2, time_samples)
+    
+    배치 처리된 출력은 다양한 길이를 가질 수 있으므로 동적으로 처리
     """
     data = np.fromfile(output_path, dtype=np.float32)
-    expected_size = 1 * NB_SOURCES * 2 * TIME_BRANCH_LEN
     
-    if data.size != expected_size:
-        raise ValueError(f"Expected {expected_size} elements, got {data.size}")
+    # 동적 길이 계산: total_size = 1 * 4 * 2 * time_samples
+    # time_samples = total_size / 8
+    if data.size % 8 != 0:
+        raise ValueError(f"Invalid file size: {data.size} elements (must be divisible by 8)")
     
-    output = data.reshape(1, NB_SOURCES, 2, TIME_BRANCH_LEN)
-    return output[0]  # Remove batch dimension: (4, 2, 343980)
+    time_samples = data.size // 8
+    print(f"  Detected time samples: {time_samples} ({time_samples/SAMPLE_RATE:.2f}s)")
+    
+    output = data.reshape(1, NB_SOURCES, 2, time_samples)
+    return output[0]  # Remove batch dimension: (4, 2, time_samples)
 
 
 def load_freq_domain_output(output_path: str) -> np.ndarray:

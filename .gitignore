@@ -247,6 +247,10 @@ onnx-models/
 qualcomm-test/htdemucs_model/
 *.onnx.data
 day6-happy.mp3
+day6-happy-20s.mp3
 qualcomm-test/*.raw
 qualcomm-example/*.raw
 qualcomm-test/batch_log.txt
+qualcomm-test/batch_log_20s.txt
+qualcomm-test/output/
+qualcomm-test/stems/
