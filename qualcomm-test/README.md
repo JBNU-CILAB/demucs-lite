@@ -199,8 +199,8 @@ DEVICE_NAME = "Samsung Galaxy S24 (Family)"
 
 # 오디오 설정
 SAMPLE_RATE = 44100
-CHUNK_SIZE = 44100   # 1초
-OVERLAP = 11025      # 25%
+CHUNK_SIZE = 44100
+OVERLAP = 11025
 BATCH_SIZE = 50
 ```
 
@@ -210,7 +210,7 @@ BATCH_SIZE = 50
 
 **FP16 변환**은 단순히 숫자 포맷만 바꾸는 것입니다:
 - 모델 구조 변경 없음
-- QNN이 그대로 해석 가능 ✅
+- QNN이 그대로 해석 가능
 
 **INT8 양자화**는 연산 자체가 바뀝니다:
 - 각 레이어에 scale/zero_point 파라미터 추가
@@ -220,8 +220,8 @@ BATCH_SIZE = 50
 
 | 방법 | 모델 구조 | QNN 호환 |
 |-----|---------|---------|
-| ONNX Runtime `quantize_dynamic` | QDQ 노드 추가 | ❌ |
-| Qualcomm AI Hub PTQ | QNN 내부 처리 | ✅ |
+| ONNX Runtime `quantize_dynamic` | QDQ 노드 추가 | X |
+| Qualcomm AI Hub PTQ | QNN 내부 처리 | O |
 
 ONNX Runtime의 INT8 양자화는 ONNX Runtime용으로 최적화되어 있어 QNN 컴파일러가 인식하지 못합니다. 따라서 Qualcomm에서는 **컴파일 시 calibration 데이터로 PTQ**를 수행해야 합니다.
 

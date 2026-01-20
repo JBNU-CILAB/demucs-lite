@@ -25,9 +25,9 @@
 
 | 시도 | 청크 크기 | 결과 |
 |------|----------|------|
-| 전체 곡 처리 | - | ❌ OOM (메모리 부족) |
-| 2초 청킹 | 88,200 samples | ❌ OOM |
-| 1초 청킹 | 44,100 samples | ✅ 성공 |
+| 전체 곡 처리 | - | X OOM (메모리 부족) |
+| 2초 청킹 | 88,200 samples | X OOM |
+| 1초 청킹 | 44,100 samples | O 성공 |
 
 ### 추론 시간 분석
 
@@ -131,8 +131,8 @@ HOP_SIZE = 33075     # 청크 간 이동 거리
 
 | 방법 | QNN 호환 |
 |-----|---------|
-| ONNX Runtime `quantize_dynamic` | ❌ (QDQ 노드가 QNN에서 인식 안 됨) |
-| Qualcomm AI Hub PTQ | ✅ |
+| ONNX Runtime `quantize_dynamic` | X (QDQ 노드가 QNN에서 인식 안 됨) |
+| Qualcomm AI Hub PTQ | O |
 
 따라서 Qualcomm에서는 **컴파일 시 calibration 데이터로 PTQ**를 수행합니다:
 
